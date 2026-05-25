@@ -13,11 +13,14 @@ Backend de la aplicación Innovatech Chile, desarrollado con Node.js y Express, 
 
 ## Arquitectura
 
-La aplicacion se despliega en 3 instancias EC2 separadas:
+La aplicacion se despliega en 3 instancias EC2 separadas dentro de la misma VPC:
 
-- Innovatech_Frontend (172.31.0.176) - Contenedor React/nginx
-- Innovatech_Backend (172.31.11.126) - Contenedor Node.js/Express
-- Innovatech_BD (172.31.3.198) - Contenedor MySQL
+- Innovatech_Frontend - Contenedor React/nginx (accesible desde Internet)
+- Innovatech_Backend - Contenedor Node.js/Express (subred privada)
+- Innovatech_BD - Contenedor MySQL (subred privada)
+
+La comunicacion entre instancias se realiza mediante IPs privadas de la VPC,
+configuradas como variables de entorno. Solo el Frontend es accesible desde Internet.
 
 ## Estructura del proyecto
 

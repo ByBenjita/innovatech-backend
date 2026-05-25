@@ -12,6 +12,9 @@ services:
       - DB_PASSWORD=password
       - DB_NAME=innovatech
       - PORT=3001
+      - JWT_SECRET=saborexpress_secret_2025
+      - ADMIN_USER=admin
+      - ADMIN_PASSWORD=admin123
     depends_on:
       db:
         condition: service_healthy

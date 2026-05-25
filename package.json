@@ -1,7 +1,7 @@
 {
   "name": "innovatech-backend",
   "version": "1.0.0",
-  "description": "Backend Innovatech Chile - Node.js + Express + MySQL",
+  "description": "Backend SaborExpress - Node.js + Express + MySQL",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,6 +10,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.6.0"
   },
   "devDependencies": {
