@@ -23,10 +23,19 @@ const ADMIN_PASS   = process.env.ADMIN_PASSWORD || 'admin123';
 // ── Migración automática al iniciar ─────────────────────────────────────────
 async function migrate() {
   const conn = await pool.getConnection();
+
+  const addColumn = async (table, column, definition) => {
+    try {
+      await conn.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    } catch (err) {
+      if (err.code !== 'ER_DUP_FIELDNAME') console.error('Migration warning:', err.message);
+    }
+  };
+
   try {
-    await conn.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) DEFAULT NULL`);
-    await conn.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS stock INT NOT NULL DEFAULT 100`);
-    await conn.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS imagen VARCHAR(500) DEFAULT NULL`);
+    await addColumn('productos', 'categoria', 'VARCHAR(50) DEFAULT NULL');
+    await addColumn('productos', 'stock',     'INT NOT NULL DEFAULT 100');
+    await addColumn('productos', 'imagen',    'VARCHAR(500) DEFAULT NULL');
     await conn.query(`
       CREATE TABLE IF NOT EXISTS ordenes (
         id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -46,9 +55,9 @@ async function migrate() {
         FOREIGN KEY (producto_id) REFERENCES productos(id)
       )
     `);
-    console.log('✅ Migración completada');
+    console.log('Migration completed');
   } catch (err) {
-    console.error('⚠️  Migración:', err.message);
+    console.error('Migration error:', err.message);
   } finally {
     conn.release();
   }
