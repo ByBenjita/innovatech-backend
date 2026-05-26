@@ -26,6 +26,7 @@ async function migrate() {
   try {
     await conn.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) DEFAULT NULL`);
     await conn.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS stock INT NOT NULL DEFAULT 100`);
+    await conn.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS imagen VARCHAR(500) DEFAULT NULL`);
     await conn.query(`
       CREATE TABLE IF NOT EXISTS ordenes (
         id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -93,26 +94,41 @@ app.get('/api/productos', async (req, res) => {
 
 // ── Productos (admin) ────────────────────────────────────────────────────────
 app.post('/api/productos', authAdmin, async (req, res) => {
-  const { nombre, precio, descripcion, categoria, stock } = req.body;
+  const { nombre, precio, descripcion, categoria, stock, imagen } = req.body;
   try {
     const [result] = await pool.query(
-      'INSERT INTO productos (nombre, precio, descripcion, categoria, stock) VALUES (?, ?, ?, ?, ?)',
-      [nombre, precio, descripcion, categoria ?? null, stock ?? 100]
+      'INSERT INTO productos (nombre, precio, descripcion, categoria, stock, imagen) VALUES (?, ?, ?, ?, ?, ?)',
+      [nombre, precio, descripcion, categoria ?? null, stock ?? 100, imagen ?? null]
     );
-    res.json({ id: result.insertId, nombre, precio, descripcion, categoria, stock });
+    res.json({ id: result.insertId, nombre, precio, descripcion, categoria, stock, imagen });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.put('/api/productos/:id', authAdmin, async (req, res) => {
-  const { nombre, precio, descripcion, categoria, stock } = req.body;
+  const { nombre, precio, descripcion, categoria, stock, imagen } = req.body;
   try {
     await pool.query(
-      'UPDATE productos SET nombre=?, precio=?, descripcion=?, categoria=?, stock=? WHERE id=?',
-      [nombre, precio, descripcion, categoria, stock, req.params.id]
+      'UPDATE productos SET nombre=?, precio=?, descripcion=?, categoria=?, stock=?, imagen=? WHERE id=?',
+      [nombre, precio, descripcion, categoria, stock, imagen ?? null, req.params.id]
     );
-    res.json({ id: Number(req.params.id), nombre, precio, descripcion, categoria, stock });
+    res.json({ id: Number(req.params.id), nombre, precio, descripcion, categoria, stock, imagen });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/productos/:id/stock', authAdmin, async (req, res) => {
+  const { delta } = req.body;
+  if (!Number.isInteger(delta)) return res.status(400).json({ error: 'delta debe ser un entero' });
+  try {
+    await pool.query(
+      'UPDATE productos SET stock = GREATEST(0, stock + ?) WHERE id = ?',
+      [delta, req.params.id]
+    );
+    const [[p]] = await pool.query('SELECT stock FROM productos WHERE id = ?', [req.params.id]);
+    res.json({ id: Number(req.params.id), stock: p.stock });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
