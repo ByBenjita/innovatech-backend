@@ -1,107 +1,88 @@
 # Innovatech Backend
 
-Backend de la aplicación Innovatech Chile, desarrollado con Node.js y Express, conectado a una base de datos MySQL. Desplegado en AWS EC2 mediante contenedores Docker con pipeline CI/CD en GitHub Actions.
+Backend de la aplicación Innovatech Chile (SaborExpress), desarrollado con Node.js y Express, conectado a una base de datos MySQL. Orquestado en un clúster Amazon EKS con pipeline CI/CD en GitHub Actions (build → push a ECR → deploy en el clúster).
 
-## Tecnologias utilizadas
-
-- Node.js 18
+## Tecnologías utilizadas
+- Node.js 18 (imagen `node:18-alpine`)
 - Express.js
 - MySQL 8.0
-- Docker y Docker Compose
+- Docker (build multi-stage)
+- Amazon EKS (Kubernetes)
+- Amazon ECR (registro de imágenes)
 - GitHub Actions (CI/CD)
-- Amazon EC2
 
 ## Arquitectura
 
-La aplicacion se despliega en 3 instancias EC2 separadas dentro de la misma VPC:
+El proyecto evolucionó de un despliegue inicial en 3 instancias EC2 separadas (etapa de contenedorización) a una orquestación completa sobre Kubernetes:
 
-- Innovatech_Frontend - Contenedor React/nginx (accesible desde Internet)
-- Innovatech_Backend - Contenedor Node.js/Express (subred privada)
-- Innovatech_BD - Contenedor MySQL (subred privada)
-
-La comunicacion entre instancias se realiza mediante IPs privadas de la VPC,
-configuradas como variables de entorno. Solo el Frontend es accesible desde Internet.
-
-## Estructura del proyecto
+- Clúster **innovatech-eks** (Amazon EKS), 2 nodos t3.medium distribuidos en us-east-1c y us-east-1d, dentro de una VPC unificada (10.1.0.0/16).
+- El Backend corre como Deployment con 2 réplicas, expuesto internamente mediante un Service de tipo ClusterIP (`backend-service`).
+- MySQL corre como pod dentro del clúster (almacenamiento `emptyDir`, ya que el EBS CSI Driver no está disponible por restricciones IAM del entorno académico).
+- La comunicación entre servicios se resuelve vía **DNS interno de Kubernetes** (`backend-service:3001`), no mediante IPs privadas fijas.
+- Autoscaling configurado con HPA (min=2, max=6 réplicas, umbral 50% CPU).
 
 ## Dockerfile
 
-Se utiliza un Dockerfile multi-stage para optimizar el tamano de la imagen final:
+Build multi-stage para optimizar el tamaño de la imagen final:
+- **Stage 1 (builder):** instala las dependencias de producción.
+- **Stage 2 (production):** copia solo lo necesario, crea usuario no root (`appuser`) por seguridad.
 
-- Stage 1 (builder): instala las dependencias de produccion
-- Stage 2 (production): copia solo lo necesario, crea usuario no root por seguridad
+## Registro de imágenes
 
-## Docker Compose
+Las imágenes se publican en Amazon ECR, etiquetadas con el hash del commit que las originó, lo que permite trazabilidad directa entre el artefacto desplegado y el código fuente.
+<account_id>.dkr.ecr.us-east-1.amazonaws.com/innovatech-backend:<commit-sha>
 
-El archivo docker-compose.yml levanta el servicio backend apuntando a la base de datos en su instancia dedicada mediante IP privada.
-
-Variables de entorno configuradas:
-- DB_HOST: IP privada de la instancia Innovatech_BD
-- DB_USER: usuario de la base de datos
-- DB_PASSWORD: contrasena de la base de datos
-- DB_NAME: nombre de la base de datos
-- PORT: puerto del servidor
-
-## Persistencia de datos
-
-La base de datos MySQL utiliza un named volume (mysql_data) definido en el docker-compose.yml de la instancia Innovatech_BD. Se eligio named volume sobre bind mount porque es gestionado directamente por Docker, es mas portable y no depende de la estructura de directorios del host.
 
 ## Pipeline CI/CD
 
-El pipeline se activa automaticamente con cada push a la rama deploy y ejecuta los siguientes pasos:
+El pipeline (rama `deploy-eks`) se activa con cada push y ejecuta:
 
-1. Checkout del codigo
-2. Login a Docker Hub
-3. Build y push de la imagen a Docker Hub
-4. Deploy automatico en la instancia EC2 via SSH
+1. Checkout del código
+2. Instalación de dependencias y ejecución de tests (`npm install && npm test --if-present`)
+3. Configuración de credenciales AWS (STS)
+4. Build y push de la imagen Docker a Amazon ECR
+5. Deploy automático en el clúster EKS (`kubectl set image deployment/backend-deployment ...`)
 
 Secrets configurados en GitHub Actions:
-- DOCKERHUB_USERNAME
-- DOCKERHUB_TOKEN
-- EC2_BACKEND_HOST
-- EC2_SSH_KEY
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_SESSION_TOKEN`
+- `EKS_CLUSTER_NAME`
 
 ## Endpoints disponibles
 
-| Metodo | Endpoint | Descripcion |
+| Método | Endpoint | Descripción |
 |--------|----------|-------------|
 | GET | /api/health | Estado del servidor |
 | GET | /api/productos | Listar productos |
 | POST | /api/productos | Crear producto |
 
-## Como ejecutar localmente
+## Cómo ejecutar localmente (desarrollo)
 
-1. Clonar el repositorio
 ```bash
 git clone https://github.com/ByBenjita/innovatech-backend.git
 cd innovatech-backend
-```
-
-2. Levantar los contenedores
-```bash
 docker-compose up -d
-```
-
-3. Verificar que funciona
-```bash
 curl http://localhost:3001/api/health
 ```
 
-## Como ejecutar en EC2
+`docker-compose.yml` levanta el backend junto a una instancia MySQL local, para desarrollo y pruebas sin depender del clúster EKS.
 
-1. Conectarse a la instancia via EC2 Instance Connect
-2. Crear el archivo docker-compose.yml con las variables de entorno correctas
-3. Ejecutar:
+## Cómo desplegar en EKS
+
 ```bash
-docker-compose up -d
+kubectl apply -f k8s/backend-deployment.yaml
+kubectl apply -f k8s/backend-service.yaml
+kubectl rollout status deployment/backend-deployment
 ```
 
 ## Principios DevOps aplicados
 
-- Contenedorizacion con Docker para garantizar consistencia entre entornos
-- Pipeline CI/CD automatizado con GitHub Actions
-- Gestion de secrets para credenciales sensibles
-- Control de versiones con Git y ramas especificas por ambiente
-- Persistencia de datos con volumenes Docker
-- Usuario no root en contenedores para seguridad
-- Multi-stage build para reducir tamano de imagen
+- Contenedorización con Docker (multi-stage build) para consistencia entre entornos
+- Orquestación productiva con Kubernetes (Amazon EKS)
+- Autoscaling horizontal (HPA) y self-healing nativo de Kubernetes
+- Pipeline CI/CD automatizado con GitHub Actions, incluyendo etapa de test
+- Registro de imágenes versionado por commit en Amazon ECR
+- Gestión de secretos vía GitHub Secrets y Kubernetes Secrets
+- Usuario no root en contenedores por seguridad
+- Principio de mínimo privilegio en roles IAM
