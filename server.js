@@ -21,12 +21,24 @@ const ADMIN_USER   = process.env.ADMIN_USER     || 'admin';
 const ADMIN_PASS   = process.env.ADMIN_PASSWORD || 'admin123';
 
 // ── Migración automática al iniciar ─────────────────────────────────────────
+async function addColumnIfNotExists(conn, table, column, definition) {
+  const [rows] = await conn.query(
+    `SELECT COUNT(*) AS existe FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+    [table, column]
+  );
+  if (rows[0].existe === 0) {
+    await conn.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`✅ Columna agregada: ${table}.${column}`);
+  }
+}
+
 async function migrate() {
   const conn = await pool.getConnection();
   try {
-    await conn.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) DEFAULT NULL`);
-    await conn.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS stock INT NOT NULL DEFAULT 100`);
-    await conn.query(`ALTER TABLE productos ADD COLUMN IF NOT EXISTS imagen VARCHAR(500) DEFAULT NULL`);
+    await addColumnIfNotExists(conn, 'productos', 'categoria', 'VARCHAR(50) DEFAULT NULL');
+    await addColumnIfNotExists(conn, 'productos', 'stock', 'INT NOT NULL DEFAULT 100');
+    await addColumnIfNotExists(conn, 'productos', 'imagen', 'VARCHAR(500) DEFAULT NULL');
     await conn.query(`
       CREATE TABLE IF NOT EXISTS ordenes (
         id         INT AUTO_INCREMENT PRIMARY KEY,
