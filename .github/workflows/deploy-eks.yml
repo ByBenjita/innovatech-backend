@@ -17,6 +17,11 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
+      - name: Ejecutar pruebas
+        run:  |
+          npm install
+          npm test --if-present
+          
       - name: Configurar credenciales AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
